@@ -1,3 +1,4 @@
+use crate::chacha20::{block, gen_state, serialize};
 use num_bigint::{BigUint, ToBigUint};
 
 fn clamp(key: &mut [u8]) {
@@ -8,6 +9,18 @@ fn clamp(key: &mut [u8]) {
     key[4] &= 252;
     key[8] &= 252;
     key[12] &= 252;
+}
+
+pub fn gen_key(key: &[u8], nonce: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let mut buf = [0; 16];
+
+    gen_state(&mut buf, key, nonce, 0)?;
+    block(&mut buf);
+
+    let mut data = serialize(&buf)?;
+    data.resize(32, 0);
+
+    Ok(data)
 }
 
 pub fn mac(msg: &[u8], key: &mut [u8]) -> anyhow::Result<Vec<u8>> {
@@ -25,7 +38,9 @@ pub fn mac(msg: &[u8], key: &mut [u8]) -> anyhow::Result<Vec<u8>> {
     let mut acc: BigUint = zero;
     let p: BigUint = two.pow(130) - five;
 
-    for i in 0..((msg.len() / 16) + 1) {
+    let block_num = msg.len() / 16 + (msg.len() % 16 != 0) as usize;
+
+    for i in 0..block_num {
         let l = std::cmp::min(msg.len() - 16 * i, 16);
         let n: BigUint = two.pow(8*l as u32) + BigUint::from_bytes_le(&msg[16*i..(16*i+l)]);
         acc += n;
@@ -40,6 +55,31 @@ pub fn mac(msg: &[u8], key: &mut [u8]) -> anyhow::Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_gen_key() -> anyhow::Result<()> {
+        let key = vec![
+            0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
+            0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
+            0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97,
+            0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f,
+        ];
+
+        let nonce = vec![
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+        ];
+
+        let key = gen_key(&key, &nonce)?;
+
+        assert_eq!(key, vec![
+            0x8a, 0xd5, 0xa0, 0x8b, 0x90, 0x5f, 0x81, 0xcc,
+            0x81, 0x50, 0x40, 0x27, 0x4a, 0xb2, 0x94, 0x71,
+            0xa8, 0x33, 0xb6, 0x37, 0xe3, 0xfd, 0x0d, 0xa5,
+            0x08, 0xdb, 0xb8, 0xe2, 0xfd, 0xd1, 0xa6, 0x46,
+        ]);
+
+        Ok(())
+    }
 
     #[test]
     fn test_mac() -> anyhow::Result<()> {
@@ -58,14 +98,14 @@ mod tests {
             0x4a, 0xbf, 0xf6, 0xaf, 0x41, 0x49, 0xf5, 0x1b,
         ];
 
-        let tag = mac(&msg, &mut key);
+        let tag = mac(&msg, &mut key)?;
 
         assert_eq!(key[..16], vec![
             0x85, 0xd6, 0xbe, 0x08, 0x54, 0x55, 0x6d, 0x03,
             0x7c, 0x44, 0x52, 0x0e, 0x40, 0xd5, 0x06, 0x08,
         ]);
         
-        assert_eq!(tag?, vec![
+        assert_eq!(tag, vec![
             0xa8, 0x06, 0x1d, 0xc1, 0x30, 0x51, 0x36, 0xc6,
             0xc2, 0x2b, 0x8b, 0xaf, 0x0c, 0x01, 0x27, 0xa9,
         ]);

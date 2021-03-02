@@ -47,7 +47,7 @@ pub fn qround(state: &mut [u32], a: usize, b: usize, c: usize, d: usize)
     state[d] = dv;
 }
 
-fn serialize(state: &[u32; 16]) -> anyhow::Result<Vec<u8>> {
+pub fn serialize(state: &[u32; 16]) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::with_capacity(64);
     for s in state {
         buf.write_u32::<LittleEndian>(*s)?;
@@ -75,7 +75,7 @@ pub fn block(state: &mut [u32; 16])
     }
 }
 
-pub fn encrypt(ptxt: Vec<u8>, key: &[u8], nonce: &[u8]) -> anyhow::Result<Vec<u8>>
+pub fn encrypt(ptxt: &[u8], key: &[u8], nonce: &[u8]) -> anyhow::Result<Vec<u8>>
 {
     let mut buf = [0; 16];
     let block_num = ((ptxt.len() - 1)/ 64) + 1;
@@ -92,7 +92,7 @@ pub fn encrypt(ptxt: Vec<u8>, key: &[u8], nonce: &[u8]) -> anyhow::Result<Vec<u8
         .collect())
 }
 
-pub fn decrypt(ctxt: Vec<u8>, key: &[u8], nonce: &[u8]) -> anyhow::Result<Vec<u8>>
+pub fn decrypt(ctxt: &[u8], key: &[u8], nonce: &[u8]) -> anyhow::Result<Vec<u8>>
 {
     encrypt(ctxt, key, nonce)
 }
@@ -220,7 +220,7 @@ mod tests {
             0x74, 0x2e,
         ];
 
-        let ctxt = encrypt(ptxt, &key, &nonce)?;
+        let ctxt = encrypt(&ptxt, &key, &nonce)?;
 
         assert_eq!(ctxt, vec![
            0x6e, 0x2e, 0x35, 0x9a, 0x25, 0x68, 0xf9, 0x80, 0x41, 0xba, 0x07, 0x28, 0xdd, 0x0d, 0x69, 0x81,
@@ -260,7 +260,7 @@ mod tests {
            0x87, 0x4d,
         ];
 
-        let ptxt = decrypt(ctxt, &key, &nonce)?;
+        let ptxt = decrypt(&ctxt, &key, &nonce)?;
 
         assert_eq!(ptxt, vec![
             0x4c, 0x61, 0x64, 0x69, 0x65, 0x73, 0x20, 0x61, 0x6e, 0x64, 0x20, 0x47, 0x65, 0x6e, 0x74, 0x6c,
